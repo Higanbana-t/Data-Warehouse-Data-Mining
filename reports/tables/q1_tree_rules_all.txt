@@ -1,0 +1,16 @@
+Cây quyết định độ sâu 3 (Benign=0, DDoS=1), phạm vi Benign: all
+F1 trên tập test: 0.9991
+
+|--- fwd_packet_length_max <= 21.00
+|   |--- total_fwd_bytes <= 19.00
+|   |   |--- max_packet_length <= 480.50
+|   |   |   |--- class: 0
+|   |   |--- max_packet_length >  480.50
+|   |   |   |--- class: 1
+|   |--- total_fwd_bytes >  19.00
+|   |   |--- dst_port <= 109.50
+|   |   |   |--- class: 1
+|   |   |--- dst_port >  109.50
+|   |   |   |--- class: 0
+|--- fwd_packet_length_max >  21.00
+|   |--- class: 0

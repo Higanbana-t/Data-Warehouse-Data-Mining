@@ -1,0 +1,87 @@
+# Cấu hình chung cho dự án
+# database:
+#   host: localhost
+#   port: 5432
+
+# Cấu hình dự án - đường dẫn tính từ THƯ MỤC GỐC dự án (nơi chứa file này)
+paths:
+  raw_dir: data/raw/cicids2017        # chứa 8 file CSV của GeneratedLabelledFlows
+  blacklist_dir: data/raw/firehol   # chứa file .netset/.ipset của FireHOL
+  clean_dir: data/processed/clean     # kết quả ETL (Parquet), mỗi file CSV gốc -> 1 file Parquet
+  tables_dir: reports/tables          # nơi lưu bảng thống kê (etl_summary.csv...)
+  schema_sql: sql/01_create_schema.sql
+  figures_dir: reports/figures
+  models_dir: models
+
+time:
+  # Timestamp của CICIDS2017 có dạng d/m/yyyy h:mm, KHÔNG có AM/PM.
+  # Dữ liệu chỉ ghi trong giờ làm việc nên giờ 1-7 được hiểu là buổi chiều (+12 giờ).
+  # Hãy kiểm tra lại bằng cột 'ts_pm_adjusted' và 'rows_outside_8_18' trong etl_summary.csv.
+  afternoon_hours: [1, 2, 3, 4, 5, 6, 7]
+  business_start: 8       # is_business_hours: 08:00 ...
+  business_end: 17        # ... đến 17:59, thứ 2 - thứ 6
+  # Khoảng ngày hợp lệ (gồm cả hai đầu); dòng ngoài khoảng bị loại và ghi log
+  date_min: "2017-07-03"
+  date_max: "2017-07-07"
+
+sampling:
+  # Mặc định NẠP TOÀN BỘ dữ liệu vào kho để kết quả OLAP chính xác.
+  # Bật nếu máy yếu: giữ benign_frac của traffic Benign và tối đa max_rows_per_label dòng mỗi nhãn tấn công.
+  enabled: false
+  benign_frac: 0.2
+  max_rows_per_label: 100000
+  random_state: 42
+etl:
+  keep_all_features: true
+
+database:
+  truncate_before_load: true   # TRUNCATE các bảng trước khi nạp để chạy lại được nhiều lần
+  copy_chunk_rows: 200000
+
+ 
+time:
+  # Timestamp của CICIDS2017 có dạng d/m/yyyy h:mm, KHÔNG có AM/PM.
+  # Dữ liệu chỉ ghi trong giờ làm việc nên giờ 1-7 được hiểu là buổi chiều (+12 giờ).
+  # Hãy kiểm tra lại bằng cột 'ts_pm_adjusted' và 'rows_outside_8_18' trong etl_summary.csv.
+  afternoon_hours: [1, 2, 3, 4, 5, 6, 7]
+  business_start: 8       # is_business_hours: 08:00 ...
+  business_end: 17        # ... đến 17:59, thứ 2 - thứ 6
+  # Khoảng ngày hợp lệ (gồm cả hai đầu); dòng ngoài khoảng bị loại và ghi log
+  date_min: "2017-07-03"
+  date_max: "2017-07-07"
+ 
+sampling:
+  # Mặc định NẠP TOÀN BỘ dữ liệu vào kho để kết quả OLAP chính xác.
+  # Bật nếu máy yếu: giữ benign_frac của traffic Benign và tối đa max_rows_per_label dòng mỗi nhãn tấn công.
+  enabled: false
+  benign_frac: 0.2
+  max_rows_per_label: 100000
+  random_state: 42
+ 
+database:
+  truncate_before_load: true   # TRUNCATE các bảng trước khi nạp để chạy lại được nhiều lần
+  copy_chunk_rows: 200000
+ 
+mining:
+  random_state: 42
+  # stratified : chia ngẫu nhiên giữ tỷ lệ các lớp (cách phổ biến, điểm thường rất cao)
+  # time_block : trong mỗi nhãn, phần đầu theo thời gian -> train, phần cuối -> test (khắt khe hơn,
+  #              hạn chế rò rỉ do các flow liền kề giống nhau). Nên chạy cả hai và so sánh trong báo cáo.
+  split_mode: stratified
+  test_size: 0.3
+  test_max_rows: 500000        # tập test giữ nguyên phân bố tự nhiên (Benign chiếm đa số) nhưng giới hạn kích thước
+  # Chỉ cân bằng/giảm mẫu TẬP TRAIN (tập test không bị đụng tới nên chỉ số phản ánh đúng thực tế)
+  train_benign_cap: 200000
+  train_cap_per_label: 50000
+  multiclass_target: attack_group    # hoặc label_raw (15 nhãn gốc)
+  # Cột loại khỏi đặc trưng (ngoài IP, timestamp, flow_id, nhãn). src_port là cổng ngẫu nhiên nên không dùng.
+  # Thử nghiệm bỏ cổng đích: python -m src.mining.train --drop-features dst_port
+  exclude_features: [src_port]
+  corr_threshold: 0.98               # bỏ 1 trong 2 đặc trưng có |tương quan| vượt ngưỡng
+  models:
+    dt:  {max_depth: 15, min_samples_leaf: 5}
+    rf:  {n_estimators: 100, max_depth: null, min_samples_leaf: 2}
+    svm: {kernel: linear, C: 1.0, train_rows: 50000, rbf_train_rows: 20000}   # kernel: linear | rbf
+  q1: {per_class: 50000, busy_quantile: 0.95}
+  q2: {min_flows: 50, k_min: 3, k_max: 8}
+ 

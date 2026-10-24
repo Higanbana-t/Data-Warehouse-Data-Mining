@@ -1,0 +1,9 @@
+{
+  "n_ips": 1219,
+  "k": 8,
+  "n_known_bot_ips": 8,
+  "loo_median_percentile": 0.002887788778877888,
+  "loo_in_top10pct": 7,
+  "loo_n": 8,
+  "random_baseline_percentile": 0.5
+}

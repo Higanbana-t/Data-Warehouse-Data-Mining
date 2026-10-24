@@ -1,0 +1,22 @@
+Cây quyết định độ sâu 3 (Benign=0, DDoS=1), phạm vi Benign: busy
+F1 trên tập test: 0.9987
+
+|--- act_data_pkt_fwd <= 1.50
+|   |--- packet_length_variance <= 1680254.88
+|   |   |--- bwd_packet_length_min <= 415.00
+|   |   |   |--- class: 0
+|   |   |--- bwd_packet_length_min >  415.00
+|   |   |   |--- class: 1
+|   |--- packet_length_variance >  1680254.88
+|   |   |--- avg_packet_size <= 1291.56
+|   |   |   |--- class: 1
+|   |   |--- avg_packet_size >  1291.56
+|   |   |   |--- class: 1
+|--- act_data_pkt_fwd >  1.50
+|   |--- fwd_packet_length_max <= 21.00
+|   |   |--- total_fwd_bytes <= 21.00
+|   |   |   |--- class: 0
+|   |   |--- total_fwd_bytes >  21.00
+|   |   |   |--- class: 1
+|   |--- fwd_packet_length_max >  21.00
+|   |   |--- class: 0

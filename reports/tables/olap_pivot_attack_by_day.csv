@@ -1,0 +1,7 @@
+﻿attack_group,mon,tue,wed,thu,fri
+Benign,529842,432001,439991,456591,414267
+Botnet,0,0,0,0,1966
+DDoS,0,0,0,0,128027
+Other,0,13835,252670,36,0
+PortScan,0,0,0,0,158930
+WebAttack,0,0,0,2180,0

@@ -1,0 +1,8 @@
+data/raw/
+data/interim/
+data/processed/
+models/*.joblib
+logs/*.log
+.env
+__pycache__/
+.ipynb_checkpoints/

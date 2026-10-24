@@ -1,0 +1,16 @@
+﻿attack_group,label_raw,total_flows
+Benign,BENIGN,2272692
+Other,DoS Hulk,231071
+PortScan,PortScan,158930
+DDoS,DDoS,128027
+Other,DoS GoldenEye,10293
+Other,FTP-Patator,7938
+Other,SSH-Patator,5897
+Other,DoS slowloris,5796
+Other,DoS Slowhttptest,5499
+Botnet,Bot,1966
+WebAttack,Web Attack - Brute Force,1507
+WebAttack,Web Attack - XSS,652
+Other,Infiltration,36
+WebAttack,Web Attack - Sql Injection,21
+Other,Heartbleed,11

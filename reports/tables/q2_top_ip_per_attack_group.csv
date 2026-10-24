@@ -1,0 +1,12 @@
+﻿attack_group,ip_address,attack_count,rank_in_group
+Botnet,205.174.165.73,705,1
+Botnet,192.168.10.15,371,2
+Botnet,192.168.10.8,271,3
+Botnet,192.168.10.9,226,4
+Botnet,192.168.10.14,209,5
+DDoS,172.16.0.1,128024,1
+DDoS,192.168.10.50,3,2
+Other,172.16.0.1,266505,1
+Other,192.168.10.8,36,2
+PortScan,172.16.0.1,158930,1
+WebAttack,172.16.0.1,2180,1

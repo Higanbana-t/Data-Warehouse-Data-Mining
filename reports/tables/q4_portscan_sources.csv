@@ -1,0 +1,2 @@
+﻿ip_address,is_internal,is_blacklisted,so_flow_portscan,so_cong_bi_quet
+172.16.0.1,True,False,158930,1000

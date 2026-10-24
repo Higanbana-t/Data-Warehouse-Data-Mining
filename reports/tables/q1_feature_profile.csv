@@ -1,0 +1,7 @@
+﻿attack_group,so_flow,tb_thoi_luong_us,tb_kich_thuoc_goi,tb_syn_flag
+Benign,2272692,11222820,124.11,0.055
+Other,266541,53085758,582.14,0.025
+PortScan,158930,82820,4.63,0.000
+DDoS,128027,16955592,822.61,0.000
+WebAttack,2180,6533719,26.38,0.000
+Botnet,1966,350943,55.26,0.000

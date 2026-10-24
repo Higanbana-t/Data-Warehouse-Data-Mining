@@ -1,0 +1,9 @@
+﻿file,rows_read,drop_null_key,drop_bad_numeric_key,drop_invalid_ip,drop_bad_timestamp,ts_pm_adjusted,drop_out_of_range_date,rows_outside_8_18,drop_negative_or_missing_measure,drop_duplicates,rows_out
+Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv,225745,0,0,0,0,225745,0,0,2,2,225741
+Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv,286467,0,0,0,0,286467,0,0,36,3,286428
+Friday-WorkingHours-Morning.pcap_ISCX.csv,191033,0,0,0,0,0,0,0,9,3,191021
+Monday-WorkingHours.pcap_ISCX.csv,529918,0,0,0,0,222799,0,0,15,61,529842
+Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv,288602,0,0,0,0,288602,0,0,4,143,288455
+Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv,458968,288602,0,0,0,0,0,0,11,3,170352
+Tuesday-WorkingHours.pcap_ISCX.csv,445909,0,0,0,0,220766,0,0,17,56,445836
+Wednesday-workingHours.pcap_ISCX.csv,692703,0,0,0,0,227337,0,0,21,21,692661

@@ -1,0 +1,177 @@
+{
+  "split_mode": "stratified",
+  "test_size": 0.3,
+  "random_state": 42,
+  "n_train_before_balance": 1981235,
+  "n_train_used": 377731,
+  "n_test": 499999,
+  "n_features": 48,
+  "drop_features": [],
+  "feature_info": {
+    "features": [
+      "dst_port",
+      "protocol_number",
+      "flow_duration_us",
+      "total_fwd_packets",
+      "total_fwd_bytes",
+      "flow_bytes_per_s",
+      "flow_packets_per_s",
+      "avg_packet_size",
+      "fin_flag_count",
+      "syn_flag_count",
+      "rst_flag_count",
+      "psh_flag_count",
+      "ack_flag_count",
+      "fwd_packet_length_max",
+      "fwd_packet_length_min",
+      "fwd_packet_length_mean",
+      "fwd_packet_length_std",
+      "bwd_packet_length_max",
+      "bwd_packet_length_min",
+      "bwd_packet_length_mean",
+      "flow_iat_mean",
+      "flow_iat_std",
+      "flow_iat_max",
+      "flow_iat_min",
+      "fwd_iat_mean",
+      "fwd_iat_std",
+      "fwd_iat_min",
+      "bwd_iat_total",
+      "bwd_iat_mean",
+      "bwd_iat_std",
+      "bwd_iat_max",
+      "bwd_iat_min",
+      "fwd_urg_flags",
+      "bwd_packets_per_s",
+      "min_packet_length",
+      "packet_length_variance",
+      "urg_flag_count",
+      "down_per_up_ratio",
+      "init_win_bytes_forward",
+      "init_win_bytes_backward",
+      "act_data_pkt_fwd",
+      "min_seg_size_forward",
+      "active_mean",
+      "active_std",
+      "active_max",
+      "active_min",
+      "idle_mean",
+      "idle_std"
+    ],
+    "dropped_constant": [
+      "bwd_psh_flags",
+      "bwd_urg_flags",
+      "fwd_avg_bytes_per_bulk",
+      "fwd_avg_packets_per_bulk",
+      "fwd_avg_bulk_rate",
+      "bwd_avg_bytes_per_bulk",
+      "bwd_avg_packets_per_bulk",
+      "bwd_avg_bulk_rate"
+    ],
+    "dropped_correlated": {
+      "total_bwd_packets": [
+        "total_fwd_packets"
+      ],
+      "total_bwd_bytes": [
+        "total_fwd_packets"
+      ],
+      "bwd_packet_length_std": [
+        "bwd_packet_length_max"
+      ],
+      "fwd_iat_total": [
+        "flow_duration_us"
+      ],
+      "fwd_iat_max": [
+        "flow_iat_max"
+      ],
+      "fwd_psh_flags": [
+        "syn_flag_count"
+      ],
+      "fwd_header_length": [
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "total_bwd_bytes"
+      ],
+      "bwd_header_length": [
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "fwd_header_length"
+      ],
+      "fwd_packets_per_s": [
+        "flow_packets_per_s"
+      ],
+      "max_packet_length": [
+        "bwd_packet_length_max"
+      ],
+      "packet_length_mean": [
+        "avg_packet_size"
+      ],
+      "packet_length_std": [
+        "max_packet_length"
+      ],
+      "cwe_flag_count": [
+        "fwd_urg_flags"
+      ],
+      "ece_flag_count": [
+        "rst_flag_count"
+      ],
+      "avg_fwd_segment_size": [
+        "fwd_packet_length_mean"
+      ],
+      "avg_bwd_segment_size": [
+        "bwd_packet_length_mean"
+      ],
+      "subflow_fwd_packets": [
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "total_bwd_bytes",
+        "fwd_header_length",
+        "bwd_header_length"
+      ],
+      "subflow_fwd_bytes": [
+        "total_fwd_bytes"
+      ],
+      "subflow_bwd_packets": [
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "fwd_header_length",
+        "bwd_header_length",
+        "subflow_fwd_packets"
+      ],
+      "subflow_bwd_bytes": [
+        "total_fwd_packets",
+        "total_bwd_bytes",
+        "fwd_header_length",
+        "subflow_fwd_packets"
+      ],
+      "idle_max": [
+        "flow_iat_max",
+        "fwd_iat_max",
+        "idle_mean"
+      ],
+      "idle_min": [
+        "idle_mean"
+      ],
+      "total_packets": [
+        "total_fwd_packets",
+        "total_bwd_packets",
+        "total_bwd_bytes",
+        "fwd_header_length",
+        "bwd_header_length",
+        "subflow_fwd_packets",
+        "subflow_bwd_packets",
+        "subflow_bwd_bytes"
+      ],
+      "total_bytes": [
+        "total_fwd_packets",
+        "total_bwd_bytes",
+        "fwd_header_length",
+        "subflow_fwd_packets",
+        "subflow_bwd_bytes",
+        "total_packets"
+      ]
+    }
+  },
+  "sklearn": "1.9.1",
+  "pandas": "3.0.6"
+}
