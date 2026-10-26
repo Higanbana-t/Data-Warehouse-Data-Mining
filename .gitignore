@@ -1,8 +1,14 @@
-data/raw/
+# Bỏ qua dữ liệu thô dung lượng lớn (>1GB)
+data/raw/cicids2017/
 data/interim/
 data/processed/
-models/*.joblib
+
+# Giữ lại danh sách blacklist FireHOL (nhẹ, phục vụ kiểm tra IP rủi ro)
+!data/raw/firehol/
+
+# Bỏ qua log và cache
 logs/*.log
 .env
 __pycache__/
 .ipynb_checkpoints/
+.pytest_cache/

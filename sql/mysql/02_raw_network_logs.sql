@@ -1,0 +1,107 @@
+-- Sinh tự động bởi src/api_simulator/make_ddl.py, KHÔNG sửa tay. Không tạo chỉ mục phụ (tăng tốc INSERT).
+CREATE DATABASE IF NOT EXISTS firewall;
+USE firewall;
+
+DROP TABLE IF EXISTS raw_network_logs;
+CREATE TABLE raw_network_logs (
+    log_id         BIGINT AUTO_INCREMENT PRIMARY KEY,   -- khóa idempotent ở kho dữ liệu
+    flow_id                           VARCHAR(150),
+    source_ip                         VARCHAR(64),
+    source_port                       INT,
+    destination_ip                    VARCHAR(64),
+    destination_port                  INT,
+    protocol                          INT,
+    event_time_raw                    VARCHAR(32),
+    flow_duration                     DOUBLE,
+    total_fwd_packets                 DOUBLE,
+    total_backward_packets            DOUBLE,
+    total_length_of_fwd_packets       DOUBLE,
+    total_length_of_bwd_packets       DOUBLE,
+    fwd_packet_length_max             DOUBLE,
+    fwd_packet_length_min             DOUBLE,
+    fwd_packet_length_mean            DOUBLE,
+    fwd_packet_length_std             DOUBLE,
+    bwd_packet_length_max             DOUBLE,
+    bwd_packet_length_min             DOUBLE,
+    bwd_packet_length_mean            DOUBLE,
+    bwd_packet_length_std             DOUBLE,
+    flow_bytes_per_s                  DOUBLE,
+    flow_packets_per_s                DOUBLE,
+    flow_iat_mean                     DOUBLE,
+    flow_iat_std                      DOUBLE,
+    flow_iat_max                      DOUBLE,
+    flow_iat_min                      DOUBLE,
+    fwd_iat_total                     DOUBLE,
+    fwd_iat_mean                      DOUBLE,
+    fwd_iat_std                       DOUBLE,
+    fwd_iat_max                       DOUBLE,
+    fwd_iat_min                       DOUBLE,
+    bwd_iat_total                     DOUBLE,
+    bwd_iat_mean                      DOUBLE,
+    bwd_iat_std                       DOUBLE,
+    bwd_iat_max                       DOUBLE,
+    bwd_iat_min                       DOUBLE,
+    fwd_psh_flags                     DOUBLE,
+    bwd_psh_flags                     DOUBLE,
+    fwd_urg_flags                     DOUBLE,
+    bwd_urg_flags                     DOUBLE,
+    fwd_header_length                 DOUBLE,
+    bwd_header_length                 DOUBLE,
+    fwd_packets_per_s                 DOUBLE,
+    bwd_packets_per_s                 DOUBLE,
+    min_packet_length                 DOUBLE,
+    max_packet_length                 DOUBLE,
+    packet_length_mean                DOUBLE,
+    packet_length_std                 DOUBLE,
+    packet_length_variance            DOUBLE,
+    fin_flag_count                    DOUBLE,
+    syn_flag_count                    DOUBLE,
+    rst_flag_count                    DOUBLE,
+    psh_flag_count                    DOUBLE,
+    ack_flag_count                    DOUBLE,
+    urg_flag_count                    DOUBLE,
+    cwe_flag_count                    DOUBLE,
+    ece_flag_count                    DOUBLE,
+    down_per_up_ratio                 DOUBLE,
+    average_packet_size               DOUBLE,
+    avg_fwd_segment_size              DOUBLE,
+    avg_bwd_segment_size              DOUBLE,
+    fwd_avg_bytes_per_bulk            DOUBLE,
+    fwd_avg_packets_per_bulk          DOUBLE,
+    fwd_avg_bulk_rate                 DOUBLE,
+    bwd_avg_bytes_per_bulk            DOUBLE,
+    bwd_avg_packets_per_bulk          DOUBLE,
+    bwd_avg_bulk_rate                 DOUBLE,
+    subflow_fwd_packets               DOUBLE,
+    subflow_fwd_bytes                 DOUBLE,
+    subflow_bwd_packets               DOUBLE,
+    subflow_bwd_bytes                 DOUBLE,
+    init_win_bytes_forward            DOUBLE,
+    init_win_bytes_backward           DOUBLE,
+    act_data_pkt_fwd                  DOUBLE,
+    min_seg_size_forward              DOUBLE,
+    active_mean                       DOUBLE,
+    active_std                        DOUBLE,
+    active_max                        DOUBLE,
+    active_min                        DOUBLE,
+    idle_mean                         DOUBLE,
+    idle_std                          DOUBLE,
+    idle_max                          DOUBLE,
+    idle_min                          DOUBLE,
+    label                             VARCHAR(64),
+    source_file    VARCHAR(100),
+    ingested_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)   -- thời điểm ghi thật (đo độ trễ)
+) ENGINE=InnoDB;
+
+-- Con trỏ của Collector: last_seq là seq cuối cùng của Firewall API đã được ghi vào raw_network_logs.
+-- Được cập nhật TRONG CÙNG GIAO DỊCH với việc ghi dữ liệu nên không mất, không trùng khi Collector chết giữa chừng.
+-- Bảng này KHÔNG nằm trong table.include.list của Debezium nên không phát sinh sự kiện CDC.
+CREATE TABLE IF NOT EXISTS collector_state (
+    source      VARCHAR(100) PRIMARY KEY,
+    last_seq    BIGINT NOT NULL DEFAULT 0,
+    updated_at  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB;
+
+-- Tài khoản 'simulator' (do Collector dùng) chỉ có INSERT/SELECT trên raw_network_logs; được thêm UPDATE
+-- ở bảng con trỏ. Tài khoản được tạo bởi docker/mysql/init/01_users.sh (chạy trước file này).
+GRANT UPDATE ON firewall.collector_state TO 'simulator'@'%';

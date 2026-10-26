@@ -1,14 +1,10 @@
--- Script tạo bảng Fact và Dimension
--- =====================================================================
--- Star Schema: Security Data Warehouse (CICIDS2017) - PostgreSQL
--- Grain: 1 dòng fact_flow = 1 luồng kết nối mạng (network flow)
--- =====================================================================
 -- =====================================================================
 -- Star Schema: Security Data Warehouse (CICIDS2017) - PostgreSQL
 -- Grain: 1 dòng fact_flow = 1 luồng kết nối mạng (network flow)
 -- =====================================================================
 
 -- CASCADE: nếu đã tạo view (04_views.sql) thì các view phụ thuộc cũng bị xóa; chạy lại 04_views.sql sau khi nạp dữ liệu.
+DROP TABLE IF EXISTS etl_batch_log CASCADE;
 DROP TABLE IF EXISTS fact_flow CASCADE;
 DROP TABLE IF EXISTS dim_time CASCADE;
 DROP TABLE IF EXISTS dim_ip CASCADE;
@@ -101,7 +97,11 @@ CREATE TABLE fact_flow (
     ack_flag_count      SMALLINT,
     fin_flag_count      SMALLINT,
     rst_flag_count      SMALLINT,
-    psh_flag_count      SMALLINT
+    psh_flag_count      SMALLINT,
+
+    -- Dùng cho ETL streaming: khóa idempotent = log_id của bảng raw_network_logs (MySQL).
+    -- NULL với dữ liệu nạp bằng ETL batch; PostgreSQL cho phép nhiều NULL trong cột UNIQUE.
+    source_log_id       BIGINT
 );
 
 -- ---------------------------------------------------------------------
@@ -114,3 +114,26 @@ CREATE INDEX idx_fact_protocol  ON fact_flow(protocol_key);
 CREATE INDEX idx_fact_dst_port  ON fact_flow(dst_port_key);
 CREATE INDEX idx_fact_label     ON fact_flow(label_key);
 CREATE INDEX idx_fact_label_src ON fact_flow(label_key, src_ip_key);
+
+-- Mỗi flow từ nguồn streaming chỉ được vào kho một lần: nạp lại cùng một lô sẽ bị bỏ qua (INSERT ... ON CONFLICT DO NOTHING)
+CREATE UNIQUE INDEX uq_fact_source_log ON fact_flow(source_log_id);
+
+-- ---------------------------------------------------------------------
+-- NHẬT KÝ ETL STREAMING: mỗi micro-batch một dòng (bằng chứng đối soát, đo độ trễ và thông lượng)
+-- ---------------------------------------------------------------------
+CREATE TABLE etl_batch_log (
+    batch_id         BIGSERIAL PRIMARY KEY,
+    consumer_group   VARCHAR(100) NOT NULL,
+    topic            VARCHAR(200) NOT NULL,
+    kafka_partition  INTEGER      NOT NULL,
+    start_offset     BIGINT       NOT NULL,
+    end_offset       BIGINT       NOT NULL,
+    rows_in          INTEGER      NOT NULL,   -- số thông điệp nhận được
+    rows_loaded      INTEGER      NOT NULL,   -- số dòng vào fact_flow (bỏ dòng trùng/bị loại)
+    rows_rejected    INTEGER      NOT NULL DEFAULT 0,   -- số dòng bị loại khi làm sạch (đưa vào khu cách ly)
+    latency_p50_ms   INTEGER,
+    latency_p95_ms   INTEGER,
+    started_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    finished_at      TIMESTAMPTZ,
+    note             TEXT
+);

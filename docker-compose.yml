@@ -1,0 +1,299 @@
+# =====================================================================
+# Hạ tầng streaming: MySQL (nguồn) -> Debezium (CDC) -> Kafka (KRaft) -> [ETL consumer] -> MinIO/S3 + PostgreSQL (DW)
+#
+# TRẠNG THÁI: chưa được chạy thử trên Docker (môi trường soạn thảo không có Docker).
+#   Cấu trúc và tên biến của Kafka/Connect lấy từ file mẫu chính thức của Debezium (nhánh main, đối chiếu 22/10/2026).
+#   Hãy làm theo cẩm nang mục 15 (công việc 6-8): chạy từng nhóm dịch vụ và đọc log nếu có lỗi.
+#
+# Cách dùng:
+#   cp .env.example .env            # rồi điền mật khẩu
+#   docker compose config           # kiểm tra cú pháp và biến
+#   docker compose up -d mysql postgres
+#   docker compose up -d kafka
+#   docker compose up -d connect minio
+#   docker compose up init          # tạo bucket + đăng ký connector (chạy một lần, tự thoát)
+#   (sau khi tạo data/replay/replay_sample.csv bằng make_replay_sample)
+#   docker compose --profile app up -d firewall-api collector   # phát dữ liệu: API -> Collector -> MySQL
+#   docker compose ps               # xem trạng thái
+#   docker compose down             # tắt, GIỮ dữ liệu;   docker compose down -v : tắt và XÓA sạch dữ liệu
+# =====================================================================
+name: dwdm
+
+networks:
+  dwdm-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  pg_data:
+  kafka_data:
+  minio_data:
+
+services:
+  # ---------------------------------------------------------------- CSDL nguồn (OLTP giả lập firewall)
+  mysql:
+    image: mysql:8.4
+    container_name: dwdm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Hãy đặt MYSQL_ROOT_PASSWORD trong .env}
+      MYSQL_DATABASE: firewall
+      DEBEZIUM_USER: ${DEBEZIUM_USER:-debezium}
+      DEBEZIUM_PASSWORD: ${DEBEZIUM_PASSWORD:?Hãy đặt DEBEZIUM_PASSWORD trong .env}
+      SIMULATOR_PASSWORD: ${SIMULATOR_PASSWORD:?Hãy đặt SIMULATOR_PASSWORD trong .env}
+    # Debezium đọc binlog: bắt buộc bật binlog, dạng ROW, đủ ảnh dòng (FULL), server-id khác 0.
+    # Giữ binlog 1 ngày để không đầy ổ đĩa khi phát lại nhiều dữ liệu.
+    command:
+      - --server-id=223344
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --binlog-expire-logs-seconds=86400
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Chỉ chạy ở LẦN KHỞI TẠO ĐẦU TIÊN (khi volume còn rỗng), theo thứ tự tên file
+      - ./docker/mysql/init/01_users.sh:/docker-entrypoint-initdb.d/01_users.sh:ro
+      - ./sql/mysql/02_raw_network_logs.sql:/docker-entrypoint-initdb.d/02_raw_network_logs.sql:ro
+    healthcheck:
+      # dùng TCP 127.0.0.1: trong giai đoạn khởi tạo MySQL tạm thời chưa nghe TCP nên chưa bị coi là "healthy"
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Data Warehouse
+  postgres:
+    image: postgres:16        # giữ bản 16: thư mục dữ liệu /var/lib/postgresql/data (bản 18 đổi cấu trúc thư mục)
+    container_name: dwdm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dw_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Hãy đặt POSTGRES_PASSWORD trong .env}
+      POSTGRES_DB: ${POSTGRES_DB:-network_dw}
+    ports:
+      - "127.0.0.1:${PG_HOST_PORT:-5433}:5432"     # 5433 để không trùng PostgreSQL cài sẵn trên máy
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./sql/01_create_schema.sql:/docker-entrypoint-initdb.d/01_create_schema.sql:ro   # tự tạo star schema lần đầu
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Message broker (Kafka KRaft, không Zookeeper)
+  kafka:
+    image: quay.io/debezium/kafka:${DEBEZIUM_VERSION:-3.7}
+    container_name: dwdm-kafka
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      # Theo file mẫu chính thức của Debezium. CLUSTER_ID phải là UUID dạng base64 và KHÔNG đổi sau lần chạy đầu
+      # (nếu đổi, phải xóa volume kafka_data).
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?Hãy đặt KAFKA_CLUSTER_ID trong .env}
+      NODE_ID: "1"
+      NODE_ROLE: combined
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+    # CHỈ nghe trong mạng Docker (kafka:9092): simulator, Connect và consumer đều chạy trong Docker nên không cần cổng
+    # ra máy chủ. Muốn chạy consumer ngoài Docker để gỡ lỗi thì phải thêm listener thứ hai (xem README / mục 14.13).
+    volumes:
+      - kafka_data:/kafka/data      # CẦN ĐỐI CHIẾU với README của image; kiểm tra bằng công việc 8 (tắt/bật vẫn còn topic)
+    healthcheck:
+      test: ["CMD-SHELL", "(echo > /dev/tcp/kafka/9092) >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Debezium (Kafka Connect)
+  connect:
+    image: quay.io/debezium/connect:${DEBEZIUM_VERSION:-3.7}
+    container_name: dwdm-connect
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: dwdm-connect
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+    ports:
+      - "127.0.0.1:${CONNECT_HOST_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "(echo > /dev/tcp/localhost/8083) >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Data Lake (S3 API)
+  # Image Docker Hub/Quay chính thức của MinIO ĐÃ BỊ GỠ (xem mục 14.13). Mặc định dùng fork cộng đồng pgsty/silo
+  # (tương thích S3, nhận biến MINIO_ROOT_USER/MINIO_ROOT_PASSWORD). Đổi image bằng biến S3_IMAGE trong .env;
+  # phần còn lại của hệ thống chỉ nói chuyện qua giao thức S3 nên không phải sửa.
+  # Lưu ý nếu đổi sang cgr.dev/chainguard/minio: image chạy bằng UID 65532 nên thư mục dữ liệu phải chown trước.
+  minio:
+    image: ${S3_IMAGE:?Hãy đặt S3_IMAGE trong .env}
+    container_name: dwdm-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?Hãy đặt S3_ACCESS_KEY trong .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Hãy đặt S3_SECRET_KEY trong .env}
+    ports:
+          - "127.0.0.1:${S3_API_HOST_PORT:-19000}:9000"
+          - "127.0.0.1:${S3_CONSOLE_HOST_PORT:-19001}:9001"
+    volumes:
+      - minio_data:/data
+    # Không đặt healthcheck vì image thay thế có thể không có curl/wget; dịch vụ `init` tự thử lại cho đến khi S3 sẵn sàng.
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Khởi tạo một lần: tạo bucket + đăng ký connector
+  init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: dwdm-app:latest
+    container_name: dwdm-init
+    profiles: ["init"]            # chỉ chạy khi gọi: docker compose up init  (hoặc --profile init)
+    restart: "no"
+    depends_on:
+      connect:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      CONNECT_URL: http://connect:8083
+      CONNECTOR_NAME: fw-mysql-connector
+      CONNECTOR_CONFIG_PATH: /app/docker/debezium/mysql-connector.json
+      DEBEZIUM_USER: ${DEBEZIUM_USER:-debezium}
+      DEBEZIUM_PASSWORD: ${DEBEZIUM_PASSWORD}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-network-lake}
+    volumes:
+      - ./docker/debezium/mysql-connector.json:/app/docker/debezium/mysql-connector.json:ro
+    command: ["python", "/app/docker/init/bootstrap.py"]
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Nguồn dữ liệu "bên ngoài": Firewall API (phương án B, mục 14.14)
+  # Phục vụ dữ liệu CICIDS2017 (2017) qua HTTP. Đọc tập mẫu phát lại do `make_replay_sample` tạo trong data/replay/.
+  firewall-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: dwdm-app:latest
+    container_name: dwdm-firewall-api
+    profiles: ["app"]
+    restart: unless-stopped
+    environment:
+      API_KEY: ${FIREWALL_API_KEY:?Hãy đặt FIREWALL_API_KEY trong .env}
+      REPLAY_DIR: /data
+      REPLAY_RATE: ${REPLAY_RATE:-200}            # số dòng/giây "đến lúc"; 0 = phát hết ngay
+      MAX_REQUESTS_PER_SECOND: ${MAX_REQUESTS_PER_SECOND:-50}
+    command: ["uvicorn", "--factory", "src.api_simulator.api:create_app_from_env", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"   # tài liệu tương tác: http://localhost:8000/docs
+    volumes:
+      - ./data/replay:/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [dwdm-net]
+
+  # Collector: gọi Firewall API theo chu kỳ rồi INSERT vào MySQL (con trỏ nằm trong bảng collector_state)
+  collector:
+    image: dwdm-app:latest
+    container_name: dwdm-collector
+    profiles: ["app"]
+    restart: "no"                  # tự thoát khi API báo hết dữ liệu (thêm --follow vào command nếu muốn chạy mãi)
+    depends_on:
+      mysql:
+        condition: service_healthy
+      firewall-api:
+        condition: service_healthy
+    environment:
+      API_URL: http://firewall-api:8000
+      API_KEY: ${FIREWALL_API_KEY}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: simulator          # tài khoản chỉ có INSERT/SELECT trên raw_network_logs (+ UPDATE con trỏ)
+      MYSQL_PASSWORD: ${SIMULATOR_PASSWORD}
+      MYSQL_DATABASE: firewall
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-0.5}
+      BATCH_LIMIT: ${BATCH_LIMIT:-500}
+    command: ["python", "-m", "src.api_simulator.collector"]
+    networks: [dwdm-net]
+
+  etl-consumer:
+    image: dwdm-app:latest
+    container_name: dwdm-etl-consumer
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-dw_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-network_dw}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      BLACKLIST_DIR: /app/data/raw/firehol
+    volumes:
+      - ./data/raw/firehol:/app/data/raw/firehol:ro
+      - ./src:/app/src
+      - ./models:/app/models:ro
+    command: ["python", "-m", "src.etl.stream_consumer"]
+    networks: [dwdm-net]
+
+  # ---------------------------------------------------------------- Backend API & SOC Dashboard (Giai đoạn 5 & 6)
+  backend-api:
+    image: dwdm-app:latest
+    container_name: dwdm-backend-api
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-dw_admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-network_dw}
+    volumes:
+      - ./src:/app/src
+      - ./dashboard:/app/dashboard:ro
+    command: ["uvicorn", "src.api_service.main:app", "--host", "0.0.0.0", "--port", "8050"]
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8050}:8050"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [dwdm-net]

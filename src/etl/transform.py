@@ -86,7 +86,7 @@ def make_time_key(ts):
 
 # ---------------------------------------------------------------- hàm chính
 def clean_flows(raw, cfg, source_file=""):
-    """Làm sạch 1 file. Trả về (DataFrame sạch, dict thống kê số dòng bị loại ở từng bước)."""
+    """Làm sạch 1 file (dùng cho Batch ETL). Trả về (DataFrame sạch, dict thống kê số dòng bị loại ở từng bước)."""
     tcfg = cfg["time"]
     stats = {"file": source_file, "rows_read": len(raw)}
 
@@ -102,82 +102,18 @@ def clean_flows(raw, cfg, source_file=""):
             duplicate_base = re.sub(r"\.\d+$", "", str(col).strip())
             if name in used_names or feature_name(duplicate_base) in used_names:
                 continue
-            values = pd.to_numeric(raw[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+            values = pd.to_numeric(raw[col], errors="coerce").replace([np.inf,-np.inf], np.nan)
             df[name] = values.to_numpy(dtype="float32")
             extra_cols.append(name)
             used_names.add(name)
 
-    # 1. Dòng thiếu các trường khóa (kể cả dòng trống/toàn dấu phẩy)
-    n = len(df)
-    df = df.dropna(subset=KEY_COLS)
-    stats["drop_null_key"] = n - len(df)
-
-    # 2. Ép kiểu số; cổng/giao thức không phải số thì loại
-    n = len(df)
-    for c in INT_KEY_COLS + MEASURE_REQUIRED + FLAG_COLS + RATE_COLS:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-    df[RATE_COLS] = df[RATE_COLS].replace([np.inf, -np.inf], np.nan)  # Infinity xảy ra khi thời lượng = 0
-    df = df.dropna(subset=INT_KEY_COLS)
-    stats["drop_bad_numeric_key"] = n - len(df)
-
-    # 3. Chuẩn hóa và kiểm tra IP
-    n = len(df)
-    uniq = pd.unique(pd.concat([df["src_ip"], df["dst_ip"]]).astype(str))
-    ip_map = {u: canonical_ip(u) for u in uniq}
-    df["src_ip"] = df["src_ip"].astype(str).map(ip_map)
-    df["dst_ip"] = df["dst_ip"].astype(str).map(ip_map)
-    df = df.dropna(subset=["src_ip", "dst_ip"])
-    stats["drop_invalid_ip"] = n - len(df)
-
-    # 4. Timestamp
-    n = len(df)
-    df["flow_start_ts"], pm_count = parse_timestamps(df["ts_raw"], tcfg["afternoon_hours"])
-    df = df.dropna(subset=["flow_start_ts"])
-    stats["drop_bad_timestamp"] = n - len(df)
-    stats["ts_pm_adjusted"] = pm_count
-
-    n = len(df)
-    lo, hi = pd.Timestamp(tcfg["date_min"]), pd.Timestamp(tcfg["date_max"]) + pd.Timedelta(days=1)
-    df = df[(df["flow_start_ts"] >= lo) & (df["flow_start_ts"] < hi)]
-    stats["drop_out_of_range_date"] = n - len(df)
-    h = df["flow_start_ts"].dt.hour
-    stats["rows_outside_8_18"] = int(((h < tcfg["business_start"]) | (h > tcfg["business_end"])).sum())
-
-    # 5. Số đo thiếu hoặc âm
-    n = len(df)
-    bad = df[MEASURE_REQUIRED].isna().any(axis=1) | (df[MEASURE_REQUIRED] < 0).any(axis=1)
-    df = df[~bad]
-    stats["drop_negative_or_missing_measure"] = n - len(df)
-
-    # 6. Kiểu dữ liệu cuối, cột dẫn xuất
-    for c in INT_KEY_COLS:
-        df[c] = df[c].astype("int64")
-    for c in ["total_fwd_packets", "total_bwd_packets"]:
-        df[c] = df[c].astype("int64")
-    for c in ["flow_duration_us", "total_fwd_bytes", "total_bwd_bytes"]:
-        df[c] = df[c].astype("int64")
-    for c in FLAG_COLS:
-        df[c] = df[c].fillna(0).clip(0, 32767).astype("int64")
-    df["total_packets"] = df["total_fwd_packets"] + df["total_bwd_packets"]
-    df["total_bytes"] = df["total_fwd_bytes"] + df["total_bwd_bytes"]
-    df["flow_id"] = df["flow_id"].fillna("").astype(str).str.strip()
-
-    # 7. Nhãn
-    df["label_raw"] = normalize_label(df["label_raw"])
-    groups = {l: attack_group_of(l) for l in df["label_raw"].unique()}
-    df["attack_group"] = df["label_raw"].map(groups)
-    df["is_attack"] = df["attack_group"] != "Benign"
-
-    # 8. Loại dòng trùng lặp hoàn toàn
-    n = len(df)
-    df = df.drop_duplicates(subset=[c for c in df.columns if c != "ts_raw" and c not in extra_cols])
-    stats["drop_duplicates"] = n - len(df)
-
-    df = df.drop(columns=["ts_raw"]).sort_values("flow_start_ts", kind="stable").reset_index(drop=True)
+    from src.etl.transform_core import apply_core_cleaning
+    df, core_stats = apply_core_cleaning(df, tcfg, extra_cols=extra_cols)
+    stats.update(core_stats)
+    
     df["source_file"] = source_file
     stats["rows_out"] = len(df)
     return df, stats
-
 
 def sample_flows(df, cfg):
     """(Tùy chọn) lấy mẫu: giữ benign_frac của Benign, tối đa max_rows_per_label dòng cho mỗi nhãn tấn công."""

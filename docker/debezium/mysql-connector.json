@@ -1,0 +1,34 @@
+{
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "mysql",
+  "database.port": "3306",
+  "database.user": "${DEBEZIUM_USER}",
+  "database.password": "${DEBEZIUM_PASSWORD}",
+  "database.server.id": "184054",
+
+  "topic.prefix": "fw",
+  "database.include.list": "firewall",
+  "table.include.list": "firewall.raw_network_logs",
+
+  "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+  "schema.history.internal.kafka.topic": "schemahistory.firewall",
+  "include.schema.changes": "false",
+
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false",
+
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms",
+
+  "poll.interval.ms": "100",
+
+  "topic.creation.default.replication.factor": "1",
+  "topic.creation.default.partitions": "1",
+  "topic.creation.default.retention.ms": "172800000",
+  "topic.creation.default.compression.type": "lz4"
+}

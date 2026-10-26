@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Operations Center - Network Anomaly & AI Threat Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- Chart.js for high performance modern charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body class="dark-theme">
+  <!-- Top Navigation Bar -->
+  <header class="soc-header">
+    <div class="header-left">
+      <div class="logo-shield">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="header-title">
+        <h1>SOC CYBERSHIELD</h1>
+        <span class="sub-badge">CDC STREAMING & AI ANOMALY DETECTION DW</span>
+      </div>
+    </div>
+
+    <div class="header-pipeline-status">
+      <div class="pipeline-node" id="node-mysql" title="MySQL OLTP Source">
+        <span class="dot active"></span> MySQL
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node" id="node-kafka" title="Kafka CDC Stream">
+        <span class="dot active"></span> Kafka
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node" id="node-etl" title="ETL Stream Consumer">
+        <span class="dot active"></span> AI Engine
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node" id="node-pg" title="PostgreSQL Star Schema DW">
+        <span class="dot active"></span> Postgre DW
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node" id="node-minio" title="MinIO S3 Data Lake">
+        <span class="dot active"></span> S3 Lake
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="live-indicator">
+        <span class="pulsing-radar"></span>
+        <span class="live-text" id="live-status-text">LIVE STREAMING</span>
+      </div>
+      <button id="btn-refresh" class="btn btn-secondary" title="Tải lại dữ liệu ngay">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon">
+          <path d="M23 4v6h-6M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Làm mới
+      </button>
+      <button id="btn-toggle-auto" class="btn btn-primary" title="Bật/Tắt cập nhật tự động">
+        <span id="auto-btn-icon">⏸</span> <span id="auto-btn-label">Tự động (3s)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Container -->
+  <main class="dashboard-content">
+    
+    <!-- KPI Overview Cards -->
+    <section class="kpi-grid">
+      <!-- Total Flows -->
+      <div class="kpi-card" id="card-flows">
+        <div class="kpi-icon-wrap icon-blue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Tổng Luồng Giám Sát</span>
+          <h2 class="kpi-value" id="kpi-total-flows">--</h2>
+          <span class="kpi-subtext"><span class="highlight-blue">fact_flow</span> Star Schema</span>
+        </div>
+      </div>
+
+      <!-- Total AI Alerts -->
+      <div class="kpi-card" id="card-alerts">
+        <div class="kpi-icon-wrap icon-red">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 22 22 22"/>
+            <line x1="12" y1="9" x2="12" y2="15"/>
+            <line x1="12" y1="18" x2="12.01" y2="18"/>
+          </svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Cảnh Báo Tấn Công (AI)</span>
+          <h2 class="kpi-value highlight-red" id="kpi-total-alerts">--</h2>
+          <span class="kpi-subtext">Mô hình Random Forest</span>
+        </div>
+      </div>
+
+      <!-- Attack Ratio -->
+      <div class="kpi-card" id="card-ratio">
+        <div class="kpi-icon-wrap icon-orange">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Tỷ Lệ Tấn Công</span>
+          <h2 class="kpi-value" id="kpi-attack-ratio">--%</h2>
+          <span class="kpi-subtext">Trên tổng lưu lượng mạng</span>
+        </div>
+      </div>
+
+      <!-- Streaming Latency P50 / P95 -->
+      <div class="kpi-card" id="card-latency">
+        <div class="kpi-icon-wrap icon-green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Độ Trễ CDC (P50 / P95)</span>
+          <h2 class="kpi-value" id="kpi-latency">-- / -- <span class="unit">ms</span></h2>
+          <span class="kpi-subtext" id="kpi-batch-info">Micro-batch ETL Log</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytics & Charts Grid -->
+    <section class="charts-grid">
+      <!-- Donut Chart: Attack Distribution -->
+      <div class="glass-panel chart-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-tag">PHÂN LOẠI</span>
+            <h3>Phân Bố Các Loại Hình Tấn Công</h3>
+          </div>
+          <span class="panel-meta">Suy luận đa lớp AI</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-attack-distribution"></canvas>
+        </div>
+      </div>
+
+      <!-- Line Chart: Time series attack trend -->
+      <div class="glass-panel chart-panel span-2">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-tag">XU HƯỚNG</span>
+            <h3>Lưu Lượng Cảnh Báo Theo Thời Gian (Timeline)</h3>
+          </div>
+          <span class="panel-meta">Trực quan hóa chuỗi thời gian</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-timeline"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Deep Dive & Live Alerts Grid -->
+    <section class="bottom-grid">
+      
+      <!-- Real-Time Alerts Feed -->
+      <div class="glass-panel alerts-feed-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="panel-tag highlight-tag">REAL-TIME FEED</span>
+            <h3>Luồng Cảnh Báo Tấn Công Trực Tiếp</h3>
+          </div>
+          <div class="panel-controls">
+            <select id="filter-attack-type" class="select-filter">
+              <option value="">Tất cả loại tấn công</option>
+              <option value="DDoS">DDoS</option>
+              <option value="PortScan">PortScan</option>
+              <option value="WebAttack">WebAttack</option>
+              <option value="Botnet">Botnet</option>
+              <option value="Other">Other (DoS/Infiltration)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-scroll-wrap">
+          <table class="soc-table" id="table-alerts">
+            <thead>
+              <tr>
+                <th>Mã Log ID</th>
+                <th>Thời Gian Ghi Nhận</th>
+                <th>IP Nguồn</th>
+                <th>IP Đích</th>
+                <th>Cổng Đích</th>
+                <th>Loại Tấn Công (AI)</th>
+                <th>Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-alerts">
+              <tr>
+                <td colspan="7" class="loading-td">Đang tải luồng cảnh báo từ CSDL...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Top Talkers & Attack Targets -->
+      <div class="glass-panel side-panel">
+        <!-- Top Attackers -->
+        <div class="side-sub-section">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-tag">THREAT ACTORS</span>
+              <h3>Top IP Nguồn Phát Tán Tấn Công</h3>
+            </div>
+          </div>
+          <div class="table-scroll-wrap mini-table-wrap">
+            <table class="soc-table mini-table">
+              <thead>
+                <tr>
+                  <th>IP Nguồn</th>
+                  <th>Số Lần</th>
+                  <th>Loại Tấn Công</th>
+                  <th>FireHOL</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-top-attackers">
+                <tr><td colspan="4" class="loading-td">Đang tổng hợp...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top Ports -->
+        <div class="side-sub-section">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span class="panel-tag">TARGET SERVICES</span>
+              <h3>Top Cổng Dịch Vụ Bị Nhắm Tới</h3>
+            </div>
+          </div>
+          <div class="chart-container-mini">
+            <canvas id="chart-top-ports"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="soc-footer">
+    <div class="footer-left">
+      <span>Đồ Án Kho Dữ Liệu & Khai Phá Dữ Liệu (DWDM) — Đề tài: Network Anomaly Detection</span>
+    </div>
+    <div class="footer-right">
+      <span class="footer-meta">PostgreSQL 16 DW • Debezium 3.7 CDC • Kafka KRaft • MinIO Lake • Scikit-learn Random Forest</span>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
